@@ -45,6 +45,7 @@ def server():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{httpd.server_address[1]}", _Handler
     httpd.shutdown()
+    httpd.server_close()
 
 
 def test_health(server):
@@ -83,6 +84,42 @@ def test_llama_server_without_binary_explains(tmp_path):
     with pytest.raises(LLMError, match="gtaviral verificar"):
         with LlamaServer(cfg):
             pass
+
+
+def test_llama_server_stops_process_when_enter_is_interrupted(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    from gtaviral import llm
+
+    model = tmp_path / "m.gguf"
+    model.write_bytes(b"x")
+    exe = sys.executable
+    cfg = make_cfg(tmp_path, llm_port=1, llama_server=exe, llm_model=model)
+    spawned: list[subprocess.Popen] = []
+    real_popen = subprocess.Popen
+
+    def fake_popen(*args, **kwargs):
+        p = real_popen([exe, "-c", "import time; time.sleep(60)"], stdout=kwargs.get("stdout"),
+                       stderr=kwargs.get("stderr"))
+        spawned.append(p)
+        return p
+
+    calls = {"n": 0}
+
+    def health(self):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return False  # antes da subida
+        raise KeyboardInterrupt  # interrompido durante a espera
+
+    monkeypatch.setattr(llm.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(llm.LlamaClient, "health", health)
+    with pytest.raises(KeyboardInterrupt):
+        with LlamaServer(cfg):
+            pass
+    assert len(spawned) == 1
+    assert spawned[0].poll() is not None
 
 
 @pytest.mark.integration

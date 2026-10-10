@@ -79,23 +79,32 @@ class LlamaServer:
             raise LLMError(f"modelo do LLM não encontrado: {self.cfg.llm_model} — rode: gtaviral verificar")
         self.cfg.work_dir.mkdir(parents=True, exist_ok=True)
         self._log = self.log_path.open("w", encoding="utf-8", errors="replace")
-        self.proc = subprocess.Popen(
-            [str(exe), "-m", str(self.cfg.llm_model), "--host", "127.0.0.1", "--port", str(self.cfg.llm_port),
-             "-ngl", "99", "-c", "16384"],
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-        )
-        deadline = time.monotonic() + self.startup_timeout
-        while time.monotonic() < deadline:
-            if self.proc.poll() is not None:
-                code = self.proc.returncode
-                self._stop()
-                raise LLMError(f"llama-server fechou ao iniciar (código {code}):\n{self._tail()}")
-            if self.client.health():
-                return self.client
-            time.sleep(1)
-        self._stop()
-        raise LLMError(f"llama-server não respondeu em {self.startup_timeout:.0f}s (log: {self.log_path})")
+        try:
+            self.proc = subprocess.Popen(
+                [str(exe), "-m", str(self.cfg.llm_model), "--host", "127.0.0.1", "--port", str(self.cfg.llm_port),
+                 "-ngl", "99", "-c", "16384"],
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+            )
+        except BaseException:
+            self._stop()
+            raise
+        try:
+            deadline = time.monotonic() + self.startup_timeout
+            while time.monotonic() < deadline:
+                if self.proc.poll() is not None:
+                    code = self.proc.returncode
+                    self._stop()
+                    raise LLMError(f"llama-server fechou ao iniciar (código {code}):\n{self._tail()}")
+                if self.client.health():
+                    return self.client
+                time.sleep(1)
+            self._stop()
+            raise LLMError(f"llama-server não respondeu em {self.startup_timeout:.0f}s (log: {self.log_path})")
+        except BaseException:
+            # Interrupção (Ctrl+C) ou erro inesperado durante a espera: __exit__ não roda, então encerra aqui.
+            self._stop()
+            raise
 
     def __exit__(self, *exc) -> bool:
         self._stop()
