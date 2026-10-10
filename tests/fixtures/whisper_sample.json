@@ -1,0 +1,45 @@
+{
+  "systeminfo": "AVX = 1",
+  "model": {"type": "large v3 turbo", "multilingual": true},
+  "params": {"model": "ggml-large-v3-turbo-q8_0.bin", "language": "auto", "translate": false},
+  "result": {"language": "en"},
+  "transcription": [
+    {
+      "timestamps": {"from": "00:00:00,000", "to": "00:00:02,500"},
+      "offsets": {"from": 0, "to": 2500},
+      "text": " Bro, look at this car.",
+      "tokens": [
+        {"text": "[_BEG_]", "offsets": {"from": 0, "to": 0}, "id": 50365, "p": 0.98, "t_dtw": -1},
+        {"text": " Bro", "offsets": {"from": 0, "to": 400}, "id": 1, "p": 0.9, "t_dtw": -1},
+        {"text": ",", "offsets": {"from": 400, "to": 450}, "id": 2, "p": 0.95, "t_dtw": -1},
+        {"text": " look", "offsets": {"from": 600, "to": 900}, "id": 3, "p": 0.99, "t_dtw": -1},
+        {"text": " at", "offsets": {"from": 900, "to": 1000}, "id": 4, "p": 0.99, "t_dtw": -1},
+        {"text": " this", "offsets": {"from": 1000, "to": 1300}, "id": 5, "p": 0.99, "t_dtw": -1},
+        {"text": " car", "offsets": {"from": 1300, "to": 1800}, "id": 6, "p": 0.97, "t_dtw": -1},
+        {"text": ".", "offsets": {"from": 1800, "to": 1850}, "id": 7, "p": 0.99, "t_dtw": -1},
+        {"text": "[_TT_125]", "offsets": {"from": 2500, "to": 2500}, "id": 50490, "p": 0.5, "t_dtw": -1}
+      ]
+    },
+    {
+      "timestamps": {"from": "00:00:02,500", "to": "00:00:06,000"},
+      "offsets": {"from": 2500, "to": 6000},
+      "text": " It just flew over the bridge.",
+      "tokens": [
+        {"text": " It", "offsets": {"from": 2500, "to": 2700}, "id": 8, "p": 0.99, "t_dtw": -1},
+        {"text": " just", "offsets": {"from": 2700, "to": 3000}, "id": 9, "p": 0.99, "t_dtw": -1},
+        {"text": " fl", "offsets": {"from": 3000, "to": 3200}, "id": 10, "p": 0.8, "t_dtw": -1},
+        {"text": "ew", "offsets": {"from": 3200, "to": 3500}, "id": 11, "p": 0.6, "t_dtw": -1},
+        {"text": " over", "offsets": {"from": 3500, "to": 3900}, "id": 12, "p": 0.99, "t_dtw": -1},
+        {"text": " the", "offsets": {"from": 3900, "to": 4000}, "id": 13, "p": 0.99, "t_dtw": -1},
+        {"text": " bridge", "offsets": {"from": 4000, "to": 4600}, "id": 14, "p": 0.99, "t_dtw": -1},
+        {"text": ".", "offsets": {"from": 4600, "to": 4650}, "id": 15, "p": 0.99, "t_dtw": -1}
+      ]
+    },
+    {
+      "timestamps": {"from": "00:00:06,000", "to": "00:00:06,500"},
+      "offsets": {"from": 6000, "to": 6500},
+      "text": " ",
+      "tokens": []
+    }
+  ]
+}
