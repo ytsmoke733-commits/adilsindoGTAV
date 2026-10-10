@@ -80,6 +80,37 @@ def test_vad_gap_start_snaps_forward_and_gap_end_snaps_back():
     assert unmap_vad(-0.1, m, "start") == 10.0
 
 
+def test_segment_splits_at_long_pause_between_words():
+    data = {"result": {"language": "pt"}, "transcription": [
+        {"offsets": {"from": 0, "to": 12000}, "text": " oi tudo bem tchau", "tokens": [
+            {"text": " oi", "offsets": {"from": 0, "to": 500}, "p": 0.9},
+            {"text": " tudo", "offsets": {"from": 500, "to": 1000}, "p": 0.9},
+            {"text": " bem", "offsets": {"from": 1000, "to": 1500}, "p": 0.9},
+            {"text": " tchau", "offsets": {"from": 6500, "to": 7000}, "p": 0.9}]},
+        {"offsets": {"from": 12000, "to": 13000}, "text": " fim", "tokens": [
+            {"text": " fim", "offsets": {"from": 12000, "to": 12500}, "p": 0.9}]}]}
+    segs = parse_whisper_json(data).segments
+    assert [(s.id, s.text, s.start, s.end) for s in segs] == [
+        (0, "oi tudo bem", 0.0, 1.5), (1, "tchau", 6.5, 7.0), (2, "fim", 12.0, 12.5)]
+    assert [w.text for w in segs[0].words] == ["oi", "tudo", "bem"]
+
+
+def test_word_ending_exactly_at_next_chunk_start_belongs_to_previous_chunk():
+    from gtaviral.transcribe import unmap_vad
+    m = [(10.0, 12.0, 0.0, 2.0), (30.0, 33.0, 2.2, 5.2)]
+    assert unmap_vad(2.2, m, "end") == 12.0
+    assert unmap_vad(2.2, m, "start") == 30.0
+
+
+def test_word_stretched_into_next_chunk_is_clamped_and_segment_splits():
+    data = {"result": {"language": "pt"}, "transcription": [
+        {"offsets": {"from": 0, "to": 9000}, "text": " oi tchau", "tokens": [
+            {"text": " oi", "offsets": {"from": 100, "to": 2300}, "p": 0.9},
+            {"text": " tchau", "offsets": {"from": 2300, "to": 3000}, "p": 0.9}]}]}
+    segs = parse_whisper_json(data, vad_map=[(10.0, 12.0, 0.0, 2.0), (30.0, 33.0, 2.2, 5.2)]).segments
+    assert [(s.text, s.start, s.end) for s in segs] == [("oi", 10.1, 12.0), ("tchau", 30.1, 30.8)]
+
+
 def test_word_stranded_in_vad_gap_stays_with_previous_speech():
     data = {"result": {"language": "pt"}, "transcription": [
         {"offsets": {"from": 0, "to": 9000}, "text": " oi tchau", "tokens": [

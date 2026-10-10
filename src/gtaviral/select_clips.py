@@ -53,7 +53,10 @@ class ClipCandidate:
 
 def _snap_start(segs: Sequence[TranslatedSegment], t: float) -> float:
     starts = [s.start for s in segs if s.start <= t + 1e-6]
-    return max(starts) if starts else 0.0
+    if starts:
+        return max(starts)
+    # antes da primeira fala: comeca na fala mais proxima, nao no silencio
+    return min((s.start for s in segs), default=0.0)
 
 
 def _snap_end(segs: Sequence[TranslatedSegment], t: float, duration: float) -> float:

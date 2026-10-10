@@ -72,13 +72,33 @@ def unmap_vad(t: float, vad_map: VadMap, kind: str) -> float:
     isto volta para o tempo do audio original. No vao entre trechos (o Whisper estica o fim da
     ultima palavra ate la), inicio vai para o proximo trecho e fim para o anterior."""
     for i, (o0, o1, v0, v1) in enumerate(vad_map):
-        if t < v0:
+        if t < v0 or (t == v0 and kind == "end" and i > 0):  # fim colado no inicio do trecho seguinte
             if i == 0 or kind == "start":
                 return o0
             return vad_map[i - 1][1]
         if t <= v1:
             return round(o0 + (t - v0), 3)
     return vad_map[-1][1]
+
+
+def _unmap_word(w: Word, vad_map: VadMap) -> Word:
+    start = unmap_vad(w.start, vad_map, "start")
+    end = unmap_vad(w.end, vad_map, "end")
+    chunk_end = next((o1 for o0, o1, _, _ in vad_map if start <= o1), end)
+    end = min(end, chunk_end)
+    return Word(w.text, min(start, end), end, w.prob)
+
+
+MAX_WORD_GAP = 2.0  # pausa entre palavras (s) a partir da qual o segmento e dividido
+
+
+def _split_on_pauses(words: tuple[Word, ...]) -> list[list[Word]]:
+    pieces: list[list[Word]] = [[]]
+    for w in words:
+        if pieces[-1] and w.start - pieces[-1][-1].end > MAX_WORD_GAP:
+            pieces.append([])
+        pieces[-1].append(w)
+    return pieces
 
 
 def parse_whisper_json(data: dict, vad_map: VadMap | None = None) -> Transcript:
@@ -91,11 +111,16 @@ def parse_whisper_json(data: dict, vad_map: VadMap | None = None) -> Transcript:
         words = tuple(_words_from_tokens(item.get("tokens", [])))
         if vad_map:
             # palavra "solta" no vao (inicio e fim no mesmo vao) fica colada no fim da fala anterior
-            words = tuple(
-                Word(w.text, min(unmap_vad(w.start, vad_map, "start"), unmap_vad(w.end, vad_map, "end")),
-                     unmap_vad(w.end, vad_map, "end"), w.prob)
-                for w in words)
+            # uma palavra nao atravessa dois trechos de fala: o Whisper as vezes estica o fim ate
+            # dentro do trecho seguinte, entao o fim fica no maximo no fim do trecho do inicio.
+            words = tuple(_unmap_word(w, vad_map) for w in words)
         start, end = item["offsets"]["from"] / 1000, item["offsets"]["to"] / 1000
+        pieces = _split_on_pauses(words)
+        if len(pieces) > 1:
+            for piece in pieces:
+                segments.append(Segment(len(segments), piece[0].start, piece[-1].end,
+                                        " ".join(w.text for w in piece), tuple(piece)))
+            continue
         # Os limites do segmento no Whisper sao folgados; o tempo por palavra e mais justo.
         if words and words[-1].end > words[0].start:
             start, end = words[0].start, words[-1].end

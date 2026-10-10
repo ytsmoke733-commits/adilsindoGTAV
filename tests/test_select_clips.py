@@ -24,6 +24,10 @@ def test_fit_span_snaps_to_segment_boundaries():
     assert fit_span(SEGS, 5.0, 21.0, 60.0) == (4.0, 22.0)
 
 
+def test_fit_span_does_not_start_in_leading_silence():
+    assert fit_span(segs((10, 20), (20, 30)), 0, 15, 60.0) == (10.0, 20.0)
+
+
 def test_fit_span_caps_long_spans_at_a_segment_end():
     long = segs(*[(i * 10, i * 10 + 10) for i in range(20)])
     assert fit_span(long, 0, 150, 200.0) == (0.0, 90.0)
