@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def _analisar(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def _renderizar(cfg: Config, args: argparse.Namespace) -> int:
+    if not re.fullmatch(r"[0-9a-f]{12}", args.job):
+        raise PipelineError(f"número de job inválido: {args.job!r} (são 12 caracteres hexadecimais; veja o analisar)")
     results = render_clips(cfg, args.job, indexes=args.clipes, framing=args.enquadramento, crop_x=args.posicao,
                            style=args.estilo, profile_name=args.perfil, use_llm=not args.sem_textos)
     print()
@@ -118,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "analisar":
             return _analisar(cfg, args)
         return _renderizar(cfg, args)
+    except KeyboardInterrupt:
+        print("Interrompido.", file=sys.stderr)
+        return 130
     except KNOWN_ERRORS as e:
         print(f"ERRO: {e}", file=sys.stderr)
         return 1

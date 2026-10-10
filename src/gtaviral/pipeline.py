@@ -10,7 +10,7 @@ from gtaviral.audio_events import AudioEvents, detect, events_from_dict, events_
 from gtaviral.config import Config
 from gtaviral.copywriter import format_copy, generate_copy
 from gtaviral.llm import LLM, LlamaServer
-from gtaviral.media import MediaError, MediaInfo, extract_audio, file_sha256, probe, validate
+from gtaviral.media import MediaError, MediaInfo, extract_audio, file_sha256, probe, validate, validate_size
 from gtaviral.proc import ToolError
 from gtaviral.render import PROFILES, Profile, RenderError, render_clip, verify_output
 from gtaviral.select_clips import ClipCandidate, clips_from_dicts, clips_to_dicts, select_clips
@@ -28,6 +28,9 @@ Log = Callable[[str], None]
 LLMFactory = Callable[[Config], ContextManager[LLM]]
 
 __all__ = ["PipelineError", "ClipResult", "analyze", "load_clips", "render_clips", "ToolError", "TranslationError"]
+
+
+CUT_MARKER = "corte.json"
 
 
 class PipelineError(RuntimeError):
@@ -85,6 +88,7 @@ def analyze(
     if not video.is_file():
         raise PipelineError(f"arquivo não encontrado: {video}")
 
+    validate_size(video.stat().st_size, cfg.max_file_gb)  # antes de gastar tempo no SHA-256
     log("Calculando a identidade do arquivo (SHA-256)...")
     sha = file_sha256(video)
     job = sha[:12]
@@ -162,6 +166,9 @@ def render_clips(
     if profile_name not in PROFILES:
         raise PipelineError(f"perfil desconhecido: {profile_name} (use {', '.join(PROFILES)})")
     profile = PROFILES[profile_name]
+    missing = sorted(set(indexes or []) - {c.index for c in clips})
+    if missing:
+        log(f"Aviso: clipe(s) {', '.join(map(str, missing))} não existe(m) neste job (tem {len(clips)}); ignorado(s)")
     chosen = [c for c in clips if indexes is None or c.index in indexes]
     if not chosen:
         raise PipelineError(f"nenhum clipe com esses números; o job tem {len(clips)}")
@@ -193,6 +200,7 @@ def _render_one(
         else:
             cues = build_cues(translated, clip.start, clip.end, style)
             editable.write_text(to_srt(cues, mark=True), encoding="utf-8")
+            _write_json(cdir / CUT_MARKER, {"inicio": clip.start, "fim": clip.end})
         (cdir / "legenda.srt").write_text(to_srt(cues), encoding="utf-8")
         (cdir / "legenda.vtt").write_text(to_vtt(cues), encoding="utf-8")
         (cdir / "legenda.ass").write_text(
@@ -201,8 +209,12 @@ def _render_one(
         out = cdir / "clipe.mp4"
         log(f"Clipe {clip.index}: renderizando {clip.end - clip.start:.1f}s "
             f"({framing}, {profile.width}x{profile.height})...")
-        render_clip(cfg, src, info, clip.start, clip.end, profile, framing, crop_x, "legenda.ass", out)
-        verify_output(cfg, out, profile, info.fps)
+        try:
+            render_clip(cfg, src, info, clip.start, clip.end, profile, framing, crop_x, "legenda.ass", out)
+            verify_output(cfg, out, profile, info.fps)
+        except BaseException:
+            out.unlink(missing_ok=True)  # nunca deixar um clipe.mp4 sem verificacao
+            raise
         warnings = tuple(cps_warnings(cues))
         (cdir / "avisos.txt").write_text("".join(w + "\n" for w in warnings), encoding="utf-8")
         _write_json(cdir / "render.json", {
@@ -217,8 +229,9 @@ def _render_one(
 
 
 def _discard_if_recut(cdir: Path, clip: ClipCandidate, log: Log) -> None:
-    marker = cdir / "render.json"
-    if not marker.is_file():
+    # corte.json nasce junto com a legenda editavel; render.json so serve a saidas de versoes antigas
+    marker = next((m for m in (cdir / CUT_MARKER, cdir / "render.json") if m.is_file()), None)
+    if marker is None:
         return
     try:
         prev = _read_json(marker)
@@ -226,7 +239,7 @@ def _discard_if_recut(cdir: Path, clip: ClipCandidate, log: Log) -> None:
     except (OSError, json.JSONDecodeError):
         same = False
     if not same:
-        for name in ("legenda_editavel.srt", "copy.json", "copy.txt"):
+        for name in ("legenda_editavel.srt", "copy.json", "copy.txt", "clipe.mp4", CUT_MARKER, "render.json"):
             (cdir / name).unlink(missing_ok=True)
         log(f"Clipe {clip.index}: o corte mudou; legenda e textos antigos descartados")
 

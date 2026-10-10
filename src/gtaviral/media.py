@@ -60,10 +60,14 @@ def parse_probe(data: dict) -> MediaInfo:
     )
 
 
-def validate(info: MediaInfo, size_bytes: int, max_file_gb: float, max_duration_min: float) -> None:
+def validate_size(size_bytes: int, max_file_gb: float) -> None:
     size_gb = size_bytes / 1024**3
     if size_gb > max_file_gb:
         raise MediaError(f"arquivo tem {size_gb:.1f} GB; o limite é {max_file_gb} GB (ajuste [limits] na config)")
+
+
+def validate(info: MediaInfo, size_bytes: int, max_file_gb: float, max_duration_min: float) -> None:
+    validate_size(size_bytes, max_file_gb)
     if info.duration <= 0:
         raise MediaError("a duração do vídeo não pôde ser lida")
     if info.duration > max_duration_min * 60:

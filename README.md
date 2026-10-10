@@ -63,7 +63,7 @@ Para voltar à legenda automática (ex.: ao trocar de estilo), apague `legenda_e
 Aceite de 09/10/2026, com gravação própria do Bloodstrike (OBS, 1920x1080, 60 fps, 71 s, fala em português
 misturada com o áudio do jogo), na RX 6600:
 
-- Testes: 7 de integração passam (1 min 54 s) e a suíte padrão passa (104 testes).
+- Testes (10/10/2026): a suíte padrão passa (139 testes) e os 7 de integração passam (2 min 35 s).
 - `analisar`: 24 s na primeira vez (SHA-256, áudio, whisper na GPU, tradução e escolha de cortes pelo LLM);
   0,6 s na segunda, com o log "reaproveitando as etapas prontas".
 - `renderizar`: clipe de 18 s em `corte` em 48 s (inclui subir o LLM para os textos); clipe de 20,8 s em
@@ -95,9 +95,12 @@ palavra (diferença de 0,00 s). A transcrição mudou bastante com o VAD: 10 seg
 "Aumentar o FPS do jogo"...) em vez de 4 com trechos mal ouvidos, as mesmas 45 palavras. É medida em tempos, não
 substitui assistir ao clipe.
 
-Reexecução com VAD (09/10/2026): o vídeo sem fala (211 s) não gera mais "Thank you."; o Whisper só ouve
-4 trechos curtos (a voz do jogo, "changing mag... stay out of sight"), que viram um único segmento de 122 s a 191 s
-(de 0 a 90 s o corte sugerido). `work\<job>\whisper.log` agora guarda a saída do `whisper-cli`, com a linha
+Reexecução com VAD (10/10/2026): o vídeo sem fala (211 s) não gera mais "Thank you."; o Whisper só ouve
+4 trechos curtos (a voz do jogo, "changing mag... stay out of sight"), divididos em 3 segmentos
+(122,5-123,4 s, 183,5-184,5 s e 189,9-191,3 s). O corte sugerido vai de 122,5 s a 211,2 s (88,7 s: começa na
+primeira fala e o fim é esticado até o fim do vídeo para chegar à duração mínima). No vídeo com fala (job
+c996e390cd75) os 10 segmentos seguem corretos (1,08-63,42 s) e o clipe 1 renderizado (12,52-34,56 s) tem frame em
+`work\acceptance\final_c01.png`. `work\<job>\whisper.log` agora guarda a saída do `whisper-cli`, com a linha
 `ggml_vulkan: 0 = AMD Radeon RX 6600` e `using Vulkan0 backend`.
 
 Falhas encontradas no aceite (ainda abertas):
@@ -112,5 +115,6 @@ Falhas encontradas no aceite (ainda abertas):
 - **Corrigido em 09/10/2026:** alucinação do whisper em silêncio ("Thank you." em trechos de 30 s, vídeo
   `D:\ReLive\BLOODSTRIKE\BLOODSTRIKE_2026.08.07-14.57.mp4`) via VAD; log do whisper com a RX 6600 agora guardado em
   `work\<job>\whisper.log`; marcador de template não preenchido nos textos agora é barrado (o LLM é chamado de novo
-  uma vez e, se repetir, o comando falha).
+  uma vez e, se repetir, o erro vai para o log, o clipe fica sem `copy.txt` e o `renderizar` termina com código 0;
+  rode-o de novo para tentar outra vez).
 - A sincronia fina (legenda no instante da fala) só se confirma assistindo ao clipe.

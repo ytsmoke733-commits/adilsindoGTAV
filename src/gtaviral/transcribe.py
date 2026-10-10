@@ -81,16 +81,22 @@ def unmap_vad(t: float, vad_map: VadMap, kind: str) -> float:
             if i == 0 or kind == "start":
                 return o0
             return vad_map[i - 1][1]
-        if t <= v1 + EPS:
+        # um inicio colado no fim do trecho nao tem fala ali: e do trecho seguinte
+        if t <= (v1 - EPS if kind == "start" else v1 + EPS):
             return round(min(max(o0 + (t - v0), o0), o1), 3)
     return vad_map[-1][1]
 
 
 def _unmap_word(w: Word, vad_map: VadMap) -> Word:
     start = unmap_vad(w.start, vad_map, "start")
-    end = unmap_vad(w.end, vad_map, "end")
-    chunk_end = next((o1 for o0, o1, _, _ in vad_map if start <= o1 + EPS), end)
-    end = min(end, chunk_end)
+    chunk = next((c for c in vad_map if c[2] - EPS <= w.start <= c[3] - EPS), None)
+    if chunk is not None:
+        # inicio dentro de um trecho: o fim usa o mesmo trecho (limitado ao fim dele)
+        o0, o1, v0, _ = chunk
+        end = round(min(max(o0 + (w.end - v0), start), o1), 3)
+    else:
+        # palavra solta no vao: fica colada no fim da fala anterior
+        end = unmap_vad(w.end, vad_map, "end")
     return Word(w.text, min(start, end), end, w.prob)
 
 
@@ -120,6 +126,8 @@ def parse_whisper_json(data: dict, vad_map: VadMap | None = None) -> Transcript:
             # solta no vao fica colada no fim da fala anterior.
             words = tuple(_unmap_word(w, vad_map) for w in words)
         start, end = item["offsets"]["from"] / 1000, item["offsets"]["to"] / 1000
+        if vad_map:  # os offsets de fallback tambem estao no tempo compactado
+            start, end = unmap_vad(start, vad_map, "start"), unmap_vad(end, vad_map, "end")
         pieces = _split_on_pauses(words)
         if len(pieces) > 1:
             for piece in pieces:

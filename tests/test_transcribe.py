@@ -106,9 +106,41 @@ def test_word_ending_exactly_at_next_chunk_start_belongs_to_previous_chunk():
 def test_word_edge_slightly_past_chunk_boundary_stays_in_its_chunk():
     from gtaviral.transcribe import unmap_vad
     m = [(10.0, 12.0, 0.0, 2.0), (30.0, 33.0, 2.2, 5.2)]
-    assert unmap_vad(2.01, m, "start") == 12.0   # 0,01 s alem do fim do trecho (log arredonda)
+    assert unmap_vad(-0.01, m, "start") == 10.0  # 0,01 s antes do inicio do trecho (log arredonda)
+    assert unmap_vad(2.01, m, "start") == 30.0   # inicio colado no fim do trecho: e do seguinte
     assert unmap_vad(2.19, m, "end") == 12.0     # fim 0,01 s antes do trecho seguinte: e do anterior
     assert unmap_vad(2.21, m, "end") == 12.0     # fim 0,01 s depois do inicio do seguinte: ainda e o anterior
+
+
+PROBE_MAP = [(10.0, 12.0, 0.0, 2.0), (60.0, 63.0, 2.2, 5.2)]
+
+
+def test_word_starting_at_chunk_start_stays_in_that_chunk():
+    data = {"result": {"language": "pt"}, "transcription": [
+        {"offsets": {"from": 3000, "to": 3500}, "text": " Ok", "tokens": [
+            {"text": " Ok", "offsets": {"from": 2200, "to": 2200}, "p": 0.9}]}]}
+    seg = parse_whisper_json(data, vad_map=PROBE_MAP).segments[0]
+    assert (seg.words[0].start, seg.words[0].end) == (60.0, 60.0)
+    assert (seg.start, seg.end) == (60.8, 61.3)  # span degenerado: offsets, tambem convertidos
+
+
+def test_segment_without_words_under_vad_gets_original_time_offsets():
+    data = {"result": {"language": "pt"}, "transcription": [
+        {"offsets": {"from": 3000, "to": 3500}, "text": " Opa", "tokens": [
+            {"text": "[_BEG_]", "offsets": {"from": 3000, "to": 3000}}]}]}
+    seg = parse_whisper_json(data, vad_map=PROBE_MAP).segments[0]
+    assert (seg.start, seg.end) == (60.8, 61.3)
+
+
+def test_word_starting_right_after_chunk_end_belongs_to_next_chunk():
+    # caso real (job c996e390cd75): "Changing" comeca em 12.46, 0,01 s depois do fim do trecho anterior
+    m = [(50.11, 51.13, 11.43, 12.45), (61.83, 62.56, 12.65, 13.38)]
+    data = {"result": {"language": "en"}, "transcription": [
+        {"offsets": {"from": 51120, "to": 62560}, "text": " Changing mag", "tokens": [
+            {"text": " Changing", "offsets": {"from": 12460, "to": 13090}, "p": 0.9},
+            {"text": " mag", "offsets": {"from": 13200, "to": 13400}, "p": 0.9}]}]}
+    seg = parse_whisper_json(data, vad_map=m).segments[0]
+    assert seg.text == "Changing mag" and seg.start == 61.83 and seg.end == 62.56
 
 
 def test_degenerate_piece_after_split_gets_minimum_span():

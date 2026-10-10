@@ -190,6 +190,52 @@ def test_recut_clip_discards_old_subtitle_and_copy(analyzed, env):
     assert not (cdir / "copy.json").exists() and not (cdir / "copy.txt").exists()
 
 
+def test_failed_render_then_recut_rebuilds_subtitle_for_new_span(analyzed, env, monkeypatch):
+    cfg, job, _ = analyzed
+    _, video, _ = env
+    working = pl.render_clip
+    monkeypatch.setattr(pl, "render_clip", lambda *a, **k: (_ for _ in ()).throw(pl.ToolError("falhou")))
+    assert pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)[0].output is None
+    cdir = cfg.output_dir / job / "clipe_01"
+    (cdir / "legenda_editavel.srt").write_text("1\n00:00:00,000 --> 00:00:02,000\nEDICAO ANTIGA\n", encoding="utf-8")
+    (cdir / "clipe.mp4").write_bytes(b"velho")
+    _, factory = llm_factory({"clipes": [{"inicio": 4.0, "fim": 20.0, "motivo": "novo", "gancho": ""}]})
+    pl.analyze(cfg, video, "f", "l", redo_clips=True, llm_factory=factory, log=QUIET)
+    monkeypatch.setattr(pl, "render_clip", working)
+    monkeypatch.setattr(pl, "render_clip", lambda *a, **k: a[-1].write_bytes(b"mp4"))
+    assert pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)[0].output is not None
+    assert "EDICAO ANTIGA" not in (cdir / "legenda_editavel.srt").read_text(encoding="utf-8")
+
+
+def test_recut_removes_old_mp4_and_failed_verify_leaves_no_mp4(analyzed, monkeypatch):
+    cfg, job, _ = analyzed
+    pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)
+    mp4 = cfg.output_dir / job / "clipe_01" / "clipe.mp4"
+    assert mp4.is_file()
+
+    def bad_verify(*a, **k):
+        raise pl.RenderError("saida invalida")
+
+    monkeypatch.setattr(pl, "verify_output", bad_verify)
+    res = pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)[0]
+    assert res.output is None and not mp4.exists()
+
+
+def test_unknown_requested_indexes_are_logged(analyzed):
+    cfg, job, _ = analyzed
+    msgs = []
+    pl.render_clips(cfg, job, indexes=[1, 9], use_llm=False, log=msgs.append)
+    assert any("9" in m and "não existe" in m for m in msgs)
+
+
+def test_oversized_file_is_rejected_before_hashing(env, monkeypatch):
+    cfg, video, _ = env
+    monkeypatch.setattr(pl, "file_sha256", lambda p: (_ for _ in ()).throw(AssertionError("hash antes do limite")))
+    small = make_cfg(cfg.work_dir.parent, max_file_gb=1e-9)
+    with pytest.raises(pl.MediaError, match="limite"):
+        pl.analyze(small, video, "f", "l", log=QUIET)
+
+
 def test_copy_stage_os_error_keeps_videos(analyzed, monkeypatch):
     cfg, job, _ = analyzed
 

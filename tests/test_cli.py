@@ -40,5 +40,23 @@ def test_os_errors_are_reported_without_traceback(monkeypatch, tmp_path, capsys)
         raise OSError("x")
 
     monkeypatch.setattr(cli, "render_clips", boom)
-    assert cli.main(["renderizar", "abc"]) == 1
+    assert cli.main(["renderizar", "abcdef012345"]) == 1
     assert "ERRO:" in capsys.readouterr().err
+
+
+def test_renderizar_rejects_malformed_job(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "load_config", lambda path: make_cfg(tmp_path))
+    monkeypatch.setattr(cli, "render_clips", lambda *a, **k: pytest.fail("nao deveria renderizar"))
+    assert cli.main(["renderizar", "..\\fora"]) == 1
+    assert "ERRO" in capsys.readouterr().err
+
+
+def test_keyboard_interrupt_exits_130(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "load_config", lambda path: make_cfg(tmp_path))
+
+    def stop(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "render_clips", stop)
+    assert cli.main(["renderizar", "abcdef012345"]) == 130
+    assert "Interrompido." in capsys.readouterr().err
