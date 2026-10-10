@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gtaviral"
+version = "0.1.0"
+description = "Clipes verticais legendados em PT-BR a partir de videos autorizados"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+gtaviral = "gtaviral.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: precisa de ffmpeg, whisper e llama instalados (Task 0) e de config.toml"]
+addopts = "-m 'not integration'"

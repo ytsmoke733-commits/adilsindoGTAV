@@ -1,0 +1,23 @@
+# Copie para config.toml. Caminhos relativos sao relativos a este arquivo.
+[tools]
+ffmpeg = "ffmpeg"                  # nome no PATH ou caminho
+ffprobe = "ffprobe"
+whisper_cli = "tools/whisper/whisper-cli.exe"
+whisper_model = "tools/models/ggml-large-v3-turbo-q8_0.bin"
+whisper_threads = 8
+llama_server = "tools/llama/llama-server.exe"
+llm_model = "tools/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+
+[llm]
+port = 8089                        # NAO usar 8080: e da Steam nesta maquina
+
+[paths]
+work_dir = "work"
+output_dir = "saida"
+
+[limits]
+max_file_gb = 4.0
+max_duration_min = 20
+
+[subtitles]
+font = "Arial Black"
