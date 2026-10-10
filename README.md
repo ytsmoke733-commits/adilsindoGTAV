@@ -50,8 +50,8 @@ Para voltar à legenda automática (ex.: ao trocar de estilo), apague `legenda_e
   corrija-os em `legenda_editavel.srt`.
 - **VAD (`whisper_vad_model`).** Evita o Whisper "ouvir" fala no silêncio. O whisper.cpp devolve o tempo das palavras
   no áudio já sem os silêncios; o programa converte de volta usando o mapa que o `whisper-cli` escreve no
-  `work\<job>\whisper.log` (por isso o `-np` não é usado). Trechos de fala muito separados podem cair no mesmo
-  segmento, e um corte sugerido a partir dele pode ficar longo.
+  `work\<job>\whisper.log` (por isso o `-np` não é usado). Se o mapa não aparecer no log, a transcrição falha em
+  vez de usar tempos errados. Os segmentos são divididos em pausas de mais de 2 s entre palavras.
 
 ## Testes
 

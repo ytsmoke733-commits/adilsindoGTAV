@@ -62,6 +62,9 @@ _VAD_INFO = re.compile(
 VadMap = list[tuple[float, float, float, float]]  # (orig_start, orig_end, vad_start, vad_end)
 
 
+EPS = 0.02  # s; os tempos do mapa vem do log com 2 casas decimais
+
+
 def parse_vad_map(log: str) -> VadMap:
     """Trechos de fala que o VAD do whisper.cpp manteve, lidos do log (sem -np)."""
     return [tuple(float(x) for x in m.groups()) for m in _VAD_INFO.finditer(log)]  # type: ignore[misc]
@@ -72,19 +75,21 @@ def unmap_vad(t: float, vad_map: VadMap, kind: str) -> float:
     isto volta para o tempo do audio original. No vao entre trechos (o Whisper estica o fim da
     ultima palavra ate la), inicio vai para o proximo trecho e fim para o anterior."""
     for i, (o0, o1, v0, v1) in enumerate(vad_map):
-        if t < v0 or (t == v0 and kind == "end" and i > 0):  # fim colado no inicio do trecho seguinte
+        # fim colado no inicio do trecho seguinte pertence ao anterior (EPS: o log arredonda a 0,01 s)
+        glued_end = kind == "end" and i > 0 and abs(t - v0) <= EPS
+        if t < v0 - EPS or glued_end:
             if i == 0 or kind == "start":
                 return o0
             return vad_map[i - 1][1]
-        if t <= v1:
-            return round(o0 + (t - v0), 3)
+        if t <= v1 + EPS:
+            return round(min(max(o0 + (t - v0), o0), o1), 3)
     return vad_map[-1][1]
 
 
 def _unmap_word(w: Word, vad_map: VadMap) -> Word:
     start = unmap_vad(w.start, vad_map, "start")
     end = unmap_vad(w.end, vad_map, "end")
-    chunk_end = next((o1 for o0, o1, _, _ in vad_map if start <= o1), end)
+    chunk_end = next((o1 for o0, o1, _, _ in vad_map if start <= o1 + EPS), end)
     end = min(end, chunk_end)
     return Word(w.text, min(start, end), end, w.prob)
 
@@ -110,15 +115,18 @@ def parse_whisper_json(data: dict, vad_map: VadMap | None = None) -> Transcript:
             continue
         words = tuple(_words_from_tokens(item.get("tokens", [])))
         if vad_map:
-            # palavra "solta" no vao (inicio e fim no mesmo vao) fica colada no fim da fala anterior
-            # uma palavra nao atravessa dois trechos de fala: o Whisper as vezes estica o fim ate
-            # dentro do trecho seguinte, entao o fim fica no maximo no fim do trecho do inicio.
+            # Com VAD o tempo das palavras vem do audio compactado: volta ao original. Uma palavra nao
+            # atravessa dois trechos de fala (o fim e limitado ao fim do trecho do inicio), e uma palavra
+            # solta no vao fica colada no fim da fala anterior.
             words = tuple(_unmap_word(w, vad_map) for w in words)
         start, end = item["offsets"]["from"] / 1000, item["offsets"]["to"] / 1000
         pieces = _split_on_pauses(words)
         if len(pieces) > 1:
             for piece in pieces:
-                segments.append(Segment(len(segments), piece[0].start, piece[-1].end,
+                p_start, p_end = piece[0].start, piece[-1].end
+                if p_end <= p_start:  # trecho degenerado: duracao minima de 0,2 s
+                    p_end = p_start + 0.2
+                segments.append(Segment(len(segments), p_start, p_end,
                                         " ".join(w.text for w in piece), tuple(piece)))
             continue
         # Os limites do segmento no Whisper sao folgados; o tempo por palavra e mais justo.
@@ -164,4 +172,10 @@ def transcribe(cfg: Config, wav: Path, out_prefix: Path, language: str = "auto")
     log_path.write_text(f"{proc.stderr}\n--- stdout ---\n{proc.stdout}", encoding="utf-8")
     json_path = out_prefix.parent / (out_prefix.name + ".json")
     raw = json_path.read_text(encoding="utf-8", errors="replace")
-    return parse_whisper_json(json.loads(raw, strict=False), parse_vad_map(proc.stderr))
+    vad_map = parse_vad_map(proc.stderr) if cfg.whisper_vad_model is not None else []
+    transcript = parse_whisper_json(json.loads(raw, strict=False), vad_map)
+    if cfg.whisper_vad_model is not None and not vad_map and transcript.segments:
+        raise ToolError(
+            "mapa do VAD não encontrado no log do whisper-cli (versão incompatível?); "
+            f"veja {log_path} ou desligue o VAD na config")
+    return transcript

@@ -6,6 +6,7 @@ import pytest
 
 from gtaviral.proc import ToolError
 from gtaviral.transcribe import (
+    Transcript,
     Word,
     parse_whisper_json,
     transcribe,
@@ -102,6 +103,43 @@ def test_word_ending_exactly_at_next_chunk_start_belongs_to_previous_chunk():
     assert unmap_vad(2.2, m, "start") == 30.0
 
 
+def test_word_edge_slightly_past_chunk_boundary_stays_in_its_chunk():
+    from gtaviral.transcribe import unmap_vad
+    m = [(10.0, 12.0, 0.0, 2.0), (30.0, 33.0, 2.2, 5.2)]
+    assert unmap_vad(2.01, m, "start") == 12.0   # 0,01 s alem do fim do trecho (log arredonda)
+    assert unmap_vad(2.19, m, "end") == 12.0     # fim 0,01 s antes do trecho seguinte: e do anterior
+    assert unmap_vad(2.21, m, "end") == 12.0     # fim 0,01 s depois do inicio do seguinte: ainda e o anterior
+
+
+def test_degenerate_piece_after_split_gets_minimum_span():
+    data = {"result": {"language": "pt"}, "transcription": [
+        {"offsets": {"from": 0, "to": 9000}, "text": " oi tchau", "tokens": [
+            {"text": " oi", "offsets": {"from": 0, "to": 500}, "p": 0.9},
+            {"text": " tchau", "offsets": {"from": 6000, "to": 6000}, "p": 0.9}]}]}
+    segs = parse_whisper_json(data).segments
+    assert [(s.text, s.start, s.end) for s in segs] == [("oi", 0.0, 0.5), ("tchau", 6.0, 6.2)]
+
+
+def _vad_cfg(tmp_path):
+    (tmp_path / "w.bin").write_bytes(b"x")
+    vad = tmp_path / "vad.bin"
+    vad.write_bytes(b"x")
+    return make_cfg(tmp_path, whisper_vad_model=vad)
+
+
+def test_vad_without_map_in_log_fails_loudly(tmp_path, monkeypatch):
+    _fake_run(monkeypatch, tmp_path, [], stderr="ggml_vulkan: RX 6600")
+    with pytest.raises(ToolError, match="VAD"):
+        transcribe(_vad_cfg(tmp_path), tmp_path / "a.wav", tmp_path / "whisper")
+
+
+def test_vad_without_map_and_without_segments_is_just_no_speech(tmp_path, monkeypatch):
+    _fake_run(monkeypatch, tmp_path, [], stderr="ggml_vulkan: RX 6600")
+    monkeypatch.setattr("gtaviral.transcribe.parse_whisper_json",
+                        lambda data, vad_map=None: Transcript("en", ()))
+    assert transcribe(_vad_cfg(tmp_path), tmp_path / "a.wav", tmp_path / "whisper").segments == ()
+
+
 def test_word_stretched_into_next_chunk_is_clamped_and_segment_splits():
     data = {"result": {"language": "pt"}, "transcription": [
         {"offsets": {"from": 0, "to": 9000}, "text": " oi tchau", "tokens": [
@@ -143,7 +181,7 @@ def test_vad_flags_added_when_configured_and_log_written(tmp_path, monkeypatch):
     vad = tmp_path / "vad.bin"
     vad.write_bytes(b"x")
     captured: list = []
-    _fake_run(monkeypatch, tmp_path, captured)
+    _fake_run(monkeypatch, tmp_path, captured, stderr="ggml_vulkan: RX 6600\n" + VAD_LOG)
     cfg = make_cfg(tmp_path, whisper_vad_model=vad)
     transcribe(cfg, tmp_path / "a.wav", tmp_path / "whisper")
     cmd = captured[0]
