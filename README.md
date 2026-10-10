@@ -66,6 +66,23 @@ misturada com o áudio do jogo), na RX 6600:
 - Legenda dentro da área segura e sem esticar a imagem, conferido em frames dos dois clipes.
 - Correção em `legenda_editavel.srt` (vírgula e `*aumentar*`) muda o `.ass` e o frame: a palavra sai em amarelo.
 
+Resumo dos 9 critérios: passam 1, 2 (com ressalva de log), 3, 6, 7 e 8; falham em parte o 5 (tradução) e o 9
+(`copy.txt`); o 4 (sincronia) precisa de uma pessoa assistindo ao clipe.
+
+Atraso medido da legenda (clipe 1, `legenda.srt` contra o tempo por palavra de `transcript.json`; o clipe começa em
+0,88 s do original). As legendas começam e terminam tarde, exceto a primeira (começa certa) e a última (termina certa):
+
+| Legenda | Início na legenda | Primeira palavra falada | Fim na legenda | Última palavra falada |
+|---|---|---|---|---|
+| 1 | 0,00 s | 0,00 s | 6,16 s | 5,13 s |
+| 2 ("Ted") | 6,16 s | 5,13 s | 6,69 s | 6,03 s |
+| 3 | 6,69 s | 6,35 s | 11,97 s | 11,32 s |
+| 4 | 11,97 s | 11,33 s | 13,38 s | 12,70 s |
+| 5 | 13,38 s | 12,73 s | 17,96 s | 17,96 s |
+
+Ou seja, os inícios atrasam de 0,34 s a 1,03 s e os finais até 1,03 s. Isso é a divisão proporcional por
+caracteres descrita nas limitações. É medida em tempos, não substitui assistir ao clipe.
+
 Falhas encontradas no aceite (ainda abertas):
 
 - **Qualidade da transcrição em áudio de jogo.** Com música e efeitos por cima da voz, o whisper erra palavras
@@ -73,7 +90,10 @@ Falhas encontradas no aceite (ainda abertas):
 - **Frase em inglês no meio da fala não é traduzida** (legenda "a gente mag stay out of sight" no clipe 2).
 - **Texto vazado no `copy.txt`.** No clipe 2 o LLM escreveu o marcador literal `{ganchos[random]}` nas
   legendas do Instagram e do TikTok. Revise o `copy.txt` antes de postar.
-- **Alucinação do whisper em silêncio.** Num vídeo de gameplay sem fala (BLOODSTRIKE de 211 s) o whisper
+- **Fato inventado e capa errada no clipe 1.** Os ganchos incluíram "mudando a forma do personagem", que não está
+  no vídeo (veio da transcrição mal ouvida), e o "texto da capa" saiu como hashtags em vez de uma frase curta.
+- **Alucinação do whisper em silêncio.** Num vídeo de gameplay sem fala
+  (`D:\ReLive\BLOODSTRIKE\BLOODSTRIKE_2026.08.07-14.57.mp4`, 211 s) o whisper
   devolveu "Thank you." em trechos de 30 s e o pipeline os tratou como fala, gerando legendas e cortes sem sentido.
 - O log do whisper com a RX 6600 (Vulkan) não é guardado em `work\<job>\`; o `whisper-cli` rodado à mão com o mesmo
   modelo imprime `ggml_vulkan: 0 = AMD Radeon RX 6600`.
