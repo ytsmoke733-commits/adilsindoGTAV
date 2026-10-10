@@ -56,6 +56,18 @@ def split_text(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
+def _fit_two_lines(chunks: Sequence[str]) -> list[str]:
+    fitted: list[str] = []
+    for chunk in chunks:
+        lines = wrap_lines(chunk)
+        if len(lines) <= 2:
+            fitted.append(chunk)
+            continue
+        for i in range(0, len(lines), 2):
+            fitted.append(" ".join(lines[i:i + 2]))
+    return fitted
+
+
 def build_cues(
     segments: Sequence[TranslatedSegment], clip_start: float, clip_end: float, style: str
 ) -> list[Cue]:
@@ -66,7 +78,7 @@ def build_cues(
         s, e = max(seg.start, clip_start), min(seg.end, clip_end)
         if e - s < 0.2:
             continue
-        chunks = split_text(seg.text, CHUNK_MAX[style])
+        chunks = _fit_two_lines(split_text(seg.text, CHUNK_MAX[style]))
         total = sum(len(c) for c in chunks) or 1
         t = s
         for chunk in chunks:

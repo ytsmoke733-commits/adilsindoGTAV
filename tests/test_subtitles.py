@@ -96,3 +96,12 @@ def test_ass_dinamica_adds_pop_in():
 def test_cps_warning_only_for_fast_cue():
     warns = cps_warnings([Cue(0.0, 1.0, "x" * 30, ()), Cue(1.0, 4.0, "curto", ())])
     assert len(warns) == 1 and "legenda 1" in warns[0]
+
+
+def test_cues_never_exceed_two_lines():
+    text = "aaaaaaaaaaaaa bbbbbbbbbbb ccccccccccccc"
+    for style in ("simples", "destaque"):
+        cues = build_cues([seg(0, 0, 4, text)], 0, 4, style)
+        assert all(len(wrap_lines(c.text)) <= 2 for c in cues)
+        assert " ".join(c.text for c in cues) == text
+        assert cues[0].start == 0.0 and cues[-1].end == 4.0
