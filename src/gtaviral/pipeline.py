@@ -9,7 +9,7 @@ from typing import Any, Callable, ContextManager
 from gtaviral.audio_events import AudioEvents, detect, events_from_dict, events_to_dict
 from gtaviral.config import Config
 from gtaviral.copywriter import format_copy, generate_copy
-from gtaviral.llm import LLM, LlamaServer, LLMError
+from gtaviral.llm import LLM, LlamaServer
 from gtaviral.media import MediaError, MediaInfo, extract_audio, file_sha256, probe, validate
 from gtaviral.proc import ToolError
 from gtaviral.render import PROFILES, Profile, RenderError, render_clip, verify_output
@@ -93,6 +93,10 @@ def analyze(
     manifest = jd / "manifest.json"
     if manifest.is_file():
         log(f"Este vídeo já foi analisado (job {job}): reaproveitando as etapas prontas.")
+        old = _read_json(manifest)
+        if old.get("fonte") != fonte.strip() or old.get("licenca") != licenca.strip():
+            log(f"Aviso: --fonte/--licenca diferentes do registro deste vídeo; mantido o registro original "
+                f"(fonte={old.get('fonte')}, licenca={old.get('licenca')})")
     else:
         _write_json(manifest, {
             "id": job, "video": str(video), "sha256": sha, "fonte": fonte.strip(), "licenca": licenca.strip(),
@@ -179,8 +183,9 @@ def _render_one(
     profile: Profile, framing: str, crop_x: float, style: str, log: Log,
 ) -> ClipResult:
     cdir = _clip_dir(cfg, job, clip.index)
-    cdir.mkdir(parents=True, exist_ok=True)
     try:
+        cdir.mkdir(parents=True, exist_ok=True)
+        _discard_if_recut(cdir, clip, log)
         editable = cdir / "legenda_editavel.srt"
         if editable.is_file():
             cues = parse_srt(editable.read_text(encoding="utf-8"))
@@ -211,6 +216,21 @@ def _render_one(
         return ClipResult(clip.index, None, str(e))
 
 
+def _discard_if_recut(cdir: Path, clip: ClipCandidate, log: Log) -> None:
+    marker = cdir / "render.json"
+    if not marker.is_file():
+        return
+    try:
+        prev = _read_json(marker)
+        same = prev.get("inicio") == clip.start and prev.get("fim") == clip.end
+    except (OSError, json.JSONDecodeError):
+        same = False
+    if not same:
+        for name in ("legenda_editavel.srt", "copy.json", "copy.txt"):
+            (cdir / name).unlink(missing_ok=True)
+        log(f"Clipe {clip.index}: o corte mudou; legenda e textos antigos descartados")
+
+
 def _recent_titles(cfg: Config) -> list[str]:
     titles: list[str] = []
     for path in sorted(cfg.output_dir.glob("*/clipe_*/copy.json"), key=lambda p: p.stat().st_mtime):
@@ -236,11 +256,10 @@ def _write_copies(
                 text = " ".join(s.text for s in translated if s.end > clip.start and s.start < clip.end)
                 try:
                     data = generate_copy(llm, text, clip.reason, _recent_titles(cfg))
-                except LLMError as e:
+                    (cdir / "copy.txt").write_text(format_copy(data, manifest["fonte"], manifest["licenca"]),
+                                                   encoding="utf-8")
+                    _write_json(cdir / "copy.json", data)  # marcador de conclusão: por último
+                except Exception as e:  # noqa: BLE001 - textos nunca derrubam vídeo pronto
                     log(f"Clipe {clip.index}: textos não gerados ({e}); o vídeo está pronto mesmo assim")
-                    continue
-                _write_json(cdir / "copy.json", data)
-                (cdir / "copy.txt").write_text(format_copy(data, manifest["fonte"], manifest["licenca"]),
-                                               encoding="utf-8")
-    except LLMError as e:
+    except Exception as e:  # noqa: BLE001
         log(f"Textos não gerados: {e}. Os vídeos estão prontos; rode o renderizar de novo para tentar outra vez.")

@@ -173,3 +173,48 @@ def test_render_unknown_job_explains(env):
     cfg, _, _ = env
     with pytest.raises(pl.PipelineError, match="analisar"):
         pl.render_clips(cfg, "naoexiste", log=QUIET)
+
+
+def test_recut_clip_discards_old_subtitle_and_copy(analyzed, env):
+    cfg, job, _ = analyzed
+    _, video, _ = env
+    pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)
+    cdir = cfg.output_dir / job / "clipe_01"
+    (cdir / "legenda_editavel.srt").write_text("1\n00:00:00,000 --> 00:00:02,000\nEDICAO ANTIGA\n", encoding="utf-8")
+    (cdir / "copy.json").write_text("{}", encoding="utf-8")
+    (cdir / "copy.txt").write_text("velho", encoding="utf-8")
+    fake, factory = llm_factory({"clipes": [{"inicio": 4.0, "fim": 20.0, "motivo": "novo", "gancho": ""}]})
+    pl.analyze(cfg, video, "https://youtu.be/x", "próprio", redo_clips=True, llm_factory=factory, log=QUIET)
+    pl.render_clips(cfg, job, indexes=[1], use_llm=False, log=QUIET)
+    assert "EDICAO ANTIGA" not in (cdir / "legenda_editavel.srt").read_text(encoding="utf-8")
+    assert not (cdir / "copy.json").exists() and not (cdir / "copy.txt").exists()
+
+
+def test_copy_stage_os_error_keeps_videos(analyzed, monkeypatch):
+    cfg, job, _ = analyzed
+
+    def boom(*a, **k):
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(pl, "generate_copy", boom)
+    _, factory = llm_factory()
+    results = pl.render_clips(cfg, job, use_llm=True, llm_factory=factory, log=QUIET)
+    assert all(r.output for r in results) and len(results) == 2
+
+
+def test_mkdir_failure_isolated_per_clip(analyzed):
+    cfg, job, _ = analyzed
+    (cfg.output_dir / job).mkdir(parents=True, exist_ok=True)
+    (cfg.output_dir / job / "clipe_01").write_text("arquivo", encoding="utf-8")
+    results = pl.render_clips(cfg, job, use_llm=False, log=QUIET)
+    assert results[0].output is None and results[1].output is not None
+
+
+def test_rerun_with_different_license_warns(env):
+    cfg, video, _ = env
+    _, first = llm_factory(translation_reply, CLIPS_REPLY)
+    pl.analyze(cfg, video, "f", "l", llm_factory=first, log=QUIET)
+    msgs = []
+    _, second = llm_factory()
+    pl.analyze(cfg, video, "f", "outra", llm_factory=second, log=msgs.append)
+    assert any("Aviso" in m for m in msgs)

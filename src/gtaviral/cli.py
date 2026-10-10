@@ -121,6 +121,11 @@ def main(argv: list[str] | None = None) -> int:
     except KNOWN_ERRORS as e:
         print(f"ERRO: {e}", file=sys.stderr)
         return 1
+    except (OSError, ValueError, KeyError) as e:
+        print(f"ERRO: {e}", file=sys.stderr)
+        print("Se o erro for num arquivo de work\\<job>, apague a pasta do job e rode analisar de novo.",
+              file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

@@ -31,3 +31,14 @@ def test_analisar_prints_table_and_next_step(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "abc123" in out and "00:04.0" in out and "carro voa" in out and "Olha isso" in out
     assert "gtaviral renderizar abc123" in out
+
+
+def test_os_errors_are_reported_without_traceback(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "load_config", lambda path: make_cfg(tmp_path))
+
+    def boom(*a, **k):
+        raise OSError("x")
+
+    monkeypatch.setattr(cli, "render_clips", boom)
+    assert cli.main(["renderizar", "abc"]) == 1
+    assert "ERRO:" in capsys.readouterr().err
