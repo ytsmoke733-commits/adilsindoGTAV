@@ -39,3 +39,11 @@ def test_present_model_files_pass(tmp_path: Path):
     checks = {c.name: c for c in check_environment(make_cfg(tmp_path))}
     assert checks["modelo do Whisper"].ok
     assert checks["modelo do LLM"].ok
+
+
+def test_non_executable_ffmpeg_reports_no_libass_instead_of_crashing(tmp_path: Path):
+    fake = tmp_path / "ffmpeg.txt"
+    fake.write_bytes(b"not an executable")
+    checks = {c.name: c for c in check_environment(make_cfg(tmp_path, ffmpeg=str(fake)))}
+    assert checks["ffmpeg"].ok
+    assert not checks["ffmpeg com libass"].ok

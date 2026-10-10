@@ -42,3 +42,17 @@ def test_resolve_tool_finds_file_and_rejects_unknown(tmp_path: Path):
     exe.write_bytes(b"")
     assert resolve_tool(str(exe)) == exe
     assert resolve_tool("nao-existe-gtaviral-123") is None
+
+
+def test_load_config_invalid_toml_explains_bom(tmp_path: Path):
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text("﻿" + MINIMAL, encoding="utf-8")
+    with pytest.raises(ConfigError, match="BOM"):
+        load_config(cfg_file)
+
+
+def test_load_config_non_numeric_value(tmp_path: Path):
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(MINIMAL + '\n[llm]\nport = "x"\n', encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(cfg_file)

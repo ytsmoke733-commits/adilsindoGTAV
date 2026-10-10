@@ -42,7 +42,13 @@ def _tool(base: Path, value: str) -> str:
 def load_config(path: Path) -> Config:
     if not path.is_file():
         raise ConfigError(f"config não encontrada: {path} (copie config.example.toml para config.toml)")
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(
+            f"config inválida ({path}): {e}. "
+            "Se você editou pelo PowerShell, salve sem BOM (UTF-8 sem BOM)."
+        ) from e
     base = path.resolve().parent
     tools = data.get("tools", {})
     paths = data.get("paths", {})
@@ -65,6 +71,8 @@ def load_config(path: Path) -> Config:
         )
     except KeyError as e:
         raise ConfigError(f"campo obrigatório ausente em [tools]: {e.args[0]}") from e
+    except ValueError as e:
+        raise ConfigError(f"valor inválido na config ({path}): {e}") from e
 
 
 def resolve_tool(value: str) -> Path | None:

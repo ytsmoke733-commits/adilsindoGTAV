@@ -40,7 +40,7 @@ def check_environment(cfg: Config) -> list[Check]:
         try:
             filters = run([ffmpeg, "-hide_banner", "-filters"]).stdout
             has_ass = any(line.split()[1:2] == ["subtitles"] for line in filters.splitlines())
-        except ToolError:
+        except (ToolError, OSError):
             has_ass = False
         checks.append(Check(
             "ffmpeg com libass",
