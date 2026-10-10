@@ -28,5 +28,6 @@ if (-not (Test-Path (Join-Path $tools 'llama\llama-server.exe'))) {
 
 # Modelos
 Get-File 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin' (Join-Path $tools 'models\ggml-large-v3-turbo-q8_0.bin')
+Get-File 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin' (Join-Path $tools 'models\ggml-silero-v6.2.0.bin')
 Get-File 'https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf' (Join-Path $tools 'models\Qwen2.5-7B-Instruct-Q4_K_M.gguf')
 Write-Host '[OK] ferramentas em' $tools

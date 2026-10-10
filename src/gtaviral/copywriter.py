@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from gtaviral.llm import LLM, LLMError
 
 SYSTEM = """Você escreve textos para vídeos curtos de GTA no TikTok e no Instagram Reels, para o público gamer brasileiro.
@@ -38,13 +40,34 @@ SCHEMA = {
 def generate_copy(llm: LLM, clip_text: str, reason: str, recent_titles: list[str]) -> dict:
     system = SYSTEM.format(recentes="; ".join(recent_titles[-20:]) or "nenhum")
     user = f"O que acontece no trecho: {reason}\n\nFalas do trecho (já traduzidas):\n{clip_text}"
-    data = llm.chat_json(system, user, SCHEMA)
+    data = _validated(llm.chat_json(system, user, SCHEMA))
+    if _placeholder_field(data):
+        data = _validated(llm.chat_json(system, user, SCHEMA))
+        campo = _placeholder_field(data)
+        if campo:
+            raise LLMError(f"textos com marcador de template não preenchido: {campo}")
+    data["hashtags"] = _clean_hashtags(data["hashtags"])
+    return data
+
+
+def _validated(data: dict) -> dict:
     missing = [k for k in SCHEMA["required"] if k not in data]
     if missing:
         raise LLMError(f"textos incompletos, faltou: {', '.join(missing)}")
     _check_types(data)
-    data["hashtags"] = _clean_hashtags(data["hashtags"])
     return data
+
+
+_PLACEHOLDER = re.compile(r"\{[^{}]*\}")
+
+
+def _placeholder_field(data: dict) -> str | None:
+    for campo in SCHEMA["required"]:
+        valor = data[campo]
+        for texto in (valor if isinstance(valor, list) else [valor]):
+            if _PLACEHOLDER.search(texto):
+                return campo
+    return None
 
 
 _LISTAS = ("ganchos", "titulos", "hashtags")

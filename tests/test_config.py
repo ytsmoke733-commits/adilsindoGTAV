@@ -25,6 +25,15 @@ def test_load_config_resolves_relative_paths_against_config_dir(tmp_path: Path):
     assert cfg.max_duration_min == 20
 
 
+def test_vad_model_optional(tmp_path: Path):
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(MINIMAL, encoding="utf-8")
+    assert load_config(cfg_file).whisper_vad_model is None
+    cfg_file.write_text(MINIMAL.replace("[tools]", '[tools]\nwhisper_vad_model = "tools/models/v.bin"'),
+                        encoding="utf-8")
+    assert load_config(cfg_file).whisper_vad_model == (tmp_path / "tools/models/v.bin").resolve()
+
+
 def test_load_config_missing_file_explains_what_to_do(tmp_path: Path):
     with pytest.raises(ConfigError, match="config.example.toml"):
         load_config(tmp_path / "config.toml")

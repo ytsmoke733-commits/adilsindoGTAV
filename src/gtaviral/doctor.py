@@ -51,6 +51,8 @@ def check_environment(cfg: Config) -> list[Check]:
     checks.append(_tool_check("ffprobe", cfg.ffprobe, FIX_FFMPEG)[0])
     checks.append(_tool_check("whisper-cli", cfg.whisper_cli, FIX_WHISPER)[0])
     checks.append(_file_check("modelo do Whisper", cfg.whisper_model, FIX_TOOLS))
+    if cfg.whisper_vad_model is not None:
+        checks.append(_file_check("modelo VAD do Whisper", cfg.whisper_vad_model, FIX_TOOLS))
     checks.append(_tool_check("llama-server", cfg.llama_server, FIX_TOOLS)[0])
     checks.append(_file_check("modelo do LLM", cfg.llm_model, FIX_TOOLS))
     return checks

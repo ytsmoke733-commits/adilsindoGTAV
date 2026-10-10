@@ -5,6 +5,7 @@ ffprobe = "ffprobe"
 whisper_cli = "tools/whisper/whisper-cli.exe"
 whisper_model = "tools/models/ggml-large-v3-turbo-q8_0.bin"
 whisper_threads = 8
+whisper_vad_model = "tools/models/ggml-silero-v6.2.0.bin"  # VAD: evita o Whisper "ouvir" fala no silencio; apague a linha para desligar
 llama_server = "tools/llama/llama-server.exe"
 llm_model = "tools/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
 

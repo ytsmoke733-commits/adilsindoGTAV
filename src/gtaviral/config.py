@@ -25,6 +25,7 @@ class Config:
     max_duration_min: float
     subtitle_font: str
     whisper_threads: int
+    whisper_vad_model: Path | None = None
 
 
 def _abs(base: Path, value: str) -> Path:
@@ -68,6 +69,7 @@ def load_config(path: Path) -> Config:
             max_duration_min=float(limits.get("max_duration_min", 20)),
             subtitle_font=str(data.get("subtitles", {}).get("font", "Arial Black")),
             whisper_threads=int(tools.get("whisper_threads", 8)),
+            whisper_vad_model=_abs(base, tools["whisper_vad_model"]) if "whisper_vad_model" in tools else None,
         )
     except KeyError as e:
         raise ConfigError(f"campo obrigatório ausente em [tools]: {e.args[0]}") from e

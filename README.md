@@ -46,6 +46,12 @@ Para voltar à legenda automática (ex.: ao trocar de estilo), apague `legenda_e
 - **Corte por regras** (`--sem-llm` ou quando o LLM não sugere nada) só olha picos de áudio.
 - **Vídeo de até 20 min** (limite de contexto do LLM local).
 - **Fonte:** Arial Black do Windows; troque em `[subtitles]` na config.
+- **Trechos que o Whisper ouve errado na fala em português não são reescritos sozinhos** (isso inventaria conteúdo):
+  corrija-os em `legenda_editavel.srt`.
+- **VAD (`whisper_vad_model`).** Evita o Whisper "ouvir" fala no silêncio. O whisper.cpp devolve o tempo das palavras
+  no áudio já sem os silêncios; o programa converte de volta usando o mapa que o `whisper-cli` escreve no
+  `work\<job>\whisper.log` (por isso o `-np` não é usado). Trechos de fala muito separados podem cair no mesmo
+  segmento, e um corte sugerido a partir dele pode ficar longo.
 
 ## Testes
 
@@ -69,8 +75,8 @@ misturada com o áudio do jogo), na RX 6600:
 Resumo dos 9 critérios: passam 1, 2 (com ressalva de log), 3, 6, 7 e 8; falham em parte o 5 (tradução) e o 9
 (`copy.txt`); o 4 (sincronia) precisa de uma pessoa assistindo ao clipe.
 
-Atraso medido da legenda (clipe 1, `legenda.srt` contra o tempo por palavra de `transcript.json`; o clipe começa em
-0,88 s do original). As legendas começam e terminam tarde, exceto a primeira (começa certa) e a última (termina certa):
+Atraso medido da legenda no aceite original (antes da correção abaixo; clipe 1, `legenda.srt` contra o tempo por
+palavra de `transcript.json`; o clipe começa em 0,88 s do original). As legendas começavam e terminavam tarde:
 
 | Legenda | Início na legenda | Primeira palavra falada | Fim na legenda | Última palavra falada |
 |---|---|---|---|---|
@@ -80,21 +86,31 @@ Atraso medido da legenda (clipe 1, `legenda.srt` contra o tempo por palavra de `
 | 4 | 11,97 s | 11,33 s | 13,38 s | 12,70 s |
 | 5 | 13,38 s | 12,73 s | 17,96 s | 17,96 s |
 
-Ou seja, os inícios atrasam de 0,34 s a 1,03 s e os finais até 1,03 s. Isso é a divisão proporcional por
-caracteres descrita nas limitações. É medida em tempos, não substitui assistir ao clipe.
+Os inícios atrasavam de 0,34 s a 1,03 s e os finais até 1,03 s: os limites de segmento do Whisper são mais
+folgados que o tempo por palavra.
+
+Correção de 09/10/2026 (VAD + limites do segmento pelo tempo da primeira e da última palavra), mesmo vídeo, clipe 1
+(12,52 s a 34,56 s do original): as 3 legendas começam e terminam no mesmo instante da primeira e da última
+palavra (diferença de 0,00 s). A transcrição mudou bastante com o VAD: 10 segmentos ("Vamos testar aqui",
+"Aumentar o FPS do jogo"...) em vez de 4 com trechos mal ouvidos, as mesmas 45 palavras. É medida em tempos, não
+substitui assistir ao clipe.
+
+Reexecução com VAD (09/10/2026): o vídeo sem fala (211 s) não gera mais "Thank you."; o Whisper só ouve
+4 trechos curtos (a voz do jogo, "changing mag... stay out of sight"), que viram um único segmento de 122 s a 191 s
+(de 0 a 90 s o corte sugerido). `work\<job>\whisper.log` agora guarda a saída do `whisper-cli`, com a linha
+`ggml_vulkan: 0 = AMD Radeon RX 6600` e `using Vulkan0 backend`.
 
 Falhas encontradas no aceite (ainda abertas):
 
 - **Qualidade da transcrição em áudio de jogo.** Com música e efeitos por cima da voz, o whisper erra palavras
   ("e o destaque é bastante boa e só um Ted") e a tradução herda o erro. Revise a legenda.
 - **Frase em inglês no meio da fala não é traduzida** (legenda "a gente mag stay out of sight" no clipe 2).
-- **Texto vazado no `copy.txt`.** No clipe 2 o LLM escreveu o marcador literal `{ganchos[random]}` nas
-  legendas do Instagram e do TikTok. Revise o `copy.txt` antes de postar.
+- **Texto vazado no `copy.txt` (visto no aceite, hoje barrado).** No clipe 2 o LLM escreveu o marcador literal
+  `{ganchos[random]}` nas legendas do Instagram e do TikTok. Revise o `copy.txt` antes de postar.
 - **Fato inventado e capa errada no clipe 1.** Os ganchos incluíram "mudando a forma do personagem", que não está
   no vídeo (veio da transcrição mal ouvida), e o "texto da capa" saiu como hashtags em vez de uma frase curta.
-- **Alucinação do whisper em silêncio.** Num vídeo de gameplay sem fala
-  (`D:\ReLive\BLOODSTRIKE\BLOODSTRIKE_2026.08.07-14.57.mp4`, 211 s) o whisper
-  devolveu "Thank you." em trechos de 30 s e o pipeline os tratou como fala, gerando legendas e cortes sem sentido.
-- O log do whisper com a RX 6600 (Vulkan) não é guardado em `work\<job>\`; o `whisper-cli` rodado à mão com o mesmo
-  modelo imprime `ggml_vulkan: 0 = AMD Radeon RX 6600`.
+- **Corrigido em 09/10/2026:** alucinação do whisper em silêncio ("Thank you." em trechos de 30 s, vídeo
+  `D:\ReLive\BLOODSTRIKE\BLOODSTRIKE_2026.08.07-14.57.mp4`) via VAD; log do whisper com a RX 6600 agora guardado em
+  `work\<job>\whisper.log`; marcador de template não preenchido nos textos agora é barrado (o LLM é chamado de novo
+  uma vez e, se repetir, o comando falha).
 - A sincronia fina (legenda no instante da fala) só se confirma assistindo ao clipe.

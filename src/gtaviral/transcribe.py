@@ -56,20 +56,50 @@ def _words_from_tokens(tokens: list[dict]) -> list[Word]:
     return words
 
 
-def parse_whisper_json(data: dict) -> Transcript:
+_VAD_INFO = re.compile(
+    r"vad_segment_info: orig_start: ([\d.]+), orig_end: ([\d.]+), vad_start: ([\d.]+), vad_end: ([\d.]+)")
+
+VadMap = list[tuple[float, float, float, float]]  # (orig_start, orig_end, vad_start, vad_end)
+
+
+def parse_vad_map(log: str) -> VadMap:
+    """Trechos de fala que o VAD do whisper.cpp manteve, lidos do log (sem -np)."""
+    return [tuple(float(x) for x in m.groups()) for m in _VAD_INFO.finditer(log)]  # type: ignore[misc]
+
+
+def unmap_vad(t: float, vad_map: VadMap, kind: str) -> float:
+    """Com VAD, o whisper.cpp devolve o tempo das palavras no audio compactado (so a fala);
+    isto volta para o tempo do audio original. No vao entre trechos (o Whisper estica o fim da
+    ultima palavra ate la), inicio vai para o proximo trecho e fim para o anterior."""
+    for i, (o0, o1, v0, v1) in enumerate(vad_map):
+        if t < v0:
+            if i == 0 or kind == "start":
+                return o0
+            return vad_map[i - 1][1]
+        if t <= v1:
+            return round(o0 + (t - v0), 3)
+    return vad_map[-1][1]
+
+
+def parse_whisper_json(data: dict, vad_map: VadMap | None = None) -> Transcript:
     language = data.get("result", {}).get("language") or "?"
     segments: list[Segment] = []
     for item in data.get("transcription", []):
         text = item.get("text", "").strip()
         if not text:
             continue
-        segments.append(Segment(
-            id=len(segments),
-            start=item["offsets"]["from"] / 1000,
-            end=item["offsets"]["to"] / 1000,
-            text=text,
-            words=tuple(_words_from_tokens(item.get("tokens", []))),
-        ))
+        words = tuple(_words_from_tokens(item.get("tokens", [])))
+        if vad_map:
+            # palavra "solta" no vao (inicio e fim no mesmo vao) fica colada no fim da fala anterior
+            words = tuple(
+                Word(w.text, min(unmap_vad(w.start, vad_map, "start"), unmap_vad(w.end, vad_map, "end")),
+                     unmap_vad(w.end, vad_map, "end"), w.prob)
+                for w in words)
+        start, end = item["offsets"]["from"] / 1000, item["offsets"]["to"] / 1000
+        # Os limites do segmento no Whisper sao folgados; o tempo por palavra e mais justo.
+        if words and words[-1].end > words[0].start:
+            start, end = words[0].start, words[-1].end
+        segments.append(Segment(id=len(segments), start=start, end=end, text=text, words=words))
     return Transcript(language=language, segments=tuple(segments))
 
 
@@ -93,8 +123,20 @@ def transcribe(cfg: Config, wav: Path, out_prefix: Path, language: str = "auto")
         raise ToolError("whisper-cli não encontrado — rode: gtaviral verificar")
     if not cfg.whisper_model.is_file():
         raise ToolError(f"modelo do Whisper não encontrado: {cfg.whisper_model} — rode: gtaviral verificar")
-    run([cli, "-m", cfg.whisper_model, "-f", wav, "-l", language, "-ojf", "-of", out_prefix,
-         "-np", "-t", str(cfg.whisper_threads)])
+    cmd = [cli, "-m", cfg.whisper_model, "-f", wav, "-l", language, "-ojf", "-of", out_prefix,
+           "-t", str(cfg.whisper_threads)]  # sem -np: o log registra GPU/Vulkan e o mapa do VAD
+    if cfg.whisper_vad_model is not None:
+        if not cfg.whisper_vad_model.is_file():
+            raise ToolError(
+                f"modelo VAD do Whisper não encontrado: {cfg.whisper_vad_model} — rode: gtaviral verificar")
+        cmd += ["--vad", "-vm", cfg.whisper_vad_model]
+    log_path = out_prefix.parent / "whisper.log"
+    try:
+        proc = run(cmd)
+    except ToolError as e:
+        log_path.write_text(str(e), encoding="utf-8")
+        raise
+    log_path.write_text(f"{proc.stderr}\n--- stdout ---\n{proc.stdout}", encoding="utf-8")
     json_path = out_prefix.parent / (out_prefix.name + ".json")
     raw = json_path.read_text(encoding="utf-8", errors="replace")
-    return parse_whisper_json(json.loads(raw, strict=False))
+    return parse_whisper_json(json.loads(raw, strict=False), parse_vad_map(proc.stderr))

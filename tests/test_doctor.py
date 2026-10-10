@@ -41,6 +41,17 @@ def test_present_model_files_pass(tmp_path: Path):
     assert checks["modelo do LLM"].ok
 
 
+def test_vad_check_only_when_configured(tmp_path: Path):
+    assert "modelo VAD do Whisper" not in {c.name for c in check_environment(make_cfg(tmp_path))}
+    vad = tmp_path / "vad.bin"
+    cfg = make_cfg(tmp_path, whisper_vad_model=vad)
+    checks = {c.name: c for c in check_environment(cfg)}
+    assert not checks["modelo VAD do Whisper"].ok and checks["modelo VAD do Whisper"].fix
+    vad.write_bytes(b"x")
+    checks = {c.name: c for c in check_environment(cfg)}
+    assert checks["modelo VAD do Whisper"].ok
+
+
 def test_non_executable_ffmpeg_reports_no_libass_instead_of_crashing(tmp_path: Path):
     fake = tmp_path / "ffmpeg.txt"
     fake.write_bytes(b"not an executable")
