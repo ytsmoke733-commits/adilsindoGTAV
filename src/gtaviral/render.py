@@ -95,10 +95,16 @@ def render_clip(
     ffmpeg = resolve_tool(cfg.ffmpeg)
     if ffmpeg is None:
         raise ToolError("ffmpeg não encontrado — rode: gtaviral verificar")
+    src = Path(src).resolve()
+    out_path = Path(out_path).resolve()
     tmp = out_path.with_name(out_path.stem + ".tmp.mp4")
-    run(build_command(str(ffmpeg), src, info, start, end, profile, framing, crop_x, subs_file, tmp),
-        cwd=out_path.parent)
-    tmp.replace(out_path)
+    try:
+        run(build_command(str(Path(ffmpeg).resolve()), src, info, start, end, profile, framing, crop_x, subs_file, tmp),
+            cwd=out_path.parent)
+        tmp.replace(out_path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def verify_output(cfg: Config, out_path: Path, profile: Profile, expected_fps: float) -> MediaInfo:

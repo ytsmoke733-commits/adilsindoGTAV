@@ -97,3 +97,29 @@ def test_render_real_clip(real_cfg, speech_video, tmp_path, framing):
     got = r.verify_output(real_cfg, out, P, expected_fps=info.fps)
     assert got.duration == pytest.approx(4.0, abs=0.2)
     assert got.has_audio
+
+
+def test_render_clip_uses_absolute_paths_and_cleans_tmp_on_failure(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from gtaviral.proc import ToolError
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "job").mkdir()
+    calls = {}
+
+    def fake_run(cmd, cwd=None, timeout=None):
+        calls["cmd"], calls["cwd"] = cmd, cwd
+        Path(cmd[-1]).write_bytes(b"parcial")
+        raise ToolError("ffmpeg falhou")
+
+    monkeypatch.setattr(r, "resolve_tool", lambda name: Path("ffmpeg.exe"))
+    monkeypatch.setattr(r, "run", fake_run)
+    with pytest.raises(ToolError):
+        r.render_clip(SimpleNamespace(ffmpeg="ffmpeg"), Path("in.mp4"), H, 0, 5, P, "corte", 0.5, None,
+                      Path("job/clipe.mp4"))
+    cmd = calls["cmd"]
+    for arg in (cmd[0], cmd[cmd.index("-i") + 1], cmd[-1]):
+        assert Path(arg).is_absolute(), arg
+    assert Path(cmd[-1]).parent == (tmp_path / "job").resolve()
+    assert not Path(cmd[-1]).exists()
