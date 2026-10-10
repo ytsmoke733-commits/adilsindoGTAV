@@ -42,9 +42,37 @@ def generate_copy(llm: LLM, clip_text: str, reason: str, recent_titles: list[str
     missing = [k for k in SCHEMA["required"] if k not in data]
     if missing:
         raise LLMError(f"textos incompletos, faltou: {', '.join(missing)}")
-    tags = (str(h).strip().replace(" ", "") for h in data["hashtags"])
-    data["hashtags"] = [t if t.startswith("#") else f"#{t}" for t in tags if t.strip("#")]
+    _check_types(data)
+    data["hashtags"] = _clean_hashtags(data["hashtags"])
     return data
+
+
+_LISTAS = ("ganchos", "titulos", "hashtags")
+
+
+def _check_types(data: dict) -> None:
+    for campo in SCHEMA["required"]:
+        valor = data[campo]
+        if campo in _LISTAS:
+            ok = isinstance(valor, list) and all(isinstance(x, str) for x in valor)
+        else:
+            ok = isinstance(valor, str)
+        if not ok:
+            raise LLMError(f"textos em formato inesperado: {campo}")
+
+
+def _clean_hashtags(raw: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for h in raw:
+        tag = h.strip().replace(" ", "")
+        tag = tag if tag.startswith("#") else f"#{tag}"
+        tag = tag.rstrip(".,;:!?")
+        if not tag.strip("#") or tag.lower() in seen:
+            continue
+        seen.add(tag.lower())
+        out.append(tag)
+    return out[:8]
 
 
 def format_copy(data: dict, fonte: str, licenca: str) -> str:

@@ -33,6 +33,20 @@ def test_generate_copy_rejects_incomplete_answer():
         generate_copy(FakeLLM([bad]), "x", "y", [])
 
 
+def test_generate_copy_rejects_wrong_types():
+    bad = dict(GOOD)
+    bad["titulos"] = "um titulo so"
+    with pytest.raises(LLMError, match="titulos"):
+        generate_copy(FakeLLM([bad]), "x", "y", [])
+
+
+def test_hashtags_deduped_cleaned_and_capped():
+    data = dict(GOOD)
+    data["hashtags"] = ["#GTA6", "gta6", "#viral,", "#a", "#b", "#c", "#d", "#e", "#f", "#g"]
+    out = generate_copy(FakeLLM([data]), "x", "y", [])
+    assert out["hashtags"] == ["#GTA6", "#viral", "#a", "#b", "#c", "#d", "#e", "#f"]
+
+
 def test_format_copy_has_sections_source_and_license():
     txt = format_copy(GOOD, fonte="https://youtu.be/abc", licenca="autorizado por @canal")
     assert txt.index("GANCHOS") < txt.index("TÍTULOS") < txt.index("HASHTAGS")
